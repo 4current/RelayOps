@@ -54,7 +54,7 @@ func printUsage() {
 	fmt.Println("  relayops version")
 	fmt.Println("  relayops doctor")
 	fmt.Println("  relayops init")
-	fmt.Println("  relayops compose -s \"subject\" -b \"body\" [-t tag1,tag2]")
+	fmt.Println("  relayops compose -s \"subject\" -b \"body\" [-t tag1,tag2] [-allow ...] [-prefer ...] [-session winlink|radio_only|post_office|p2p]")
 	fmt.Println("  relayops list [-n 25]")
 	fmt.Println("")
 }
@@ -111,6 +111,9 @@ func runCompose(args []string) {
 	subject := fs.String("s", "", "subject")
 	body := fs.String("b", "", "body")
 	tagCSV := fs.String("t", "", "comma-separated tags")
+	allowed := fs.String("allow", "", "allowed modes (comma-separated), e.g. packet,ardop,vara_hf")
+	preferred := fs.String("prefer", "", "preferred modes (comma-separated), e.g. packet,vara_fm,telnet")
+	session := fs.String("session", "winlink", "session mode: winlink, radio_only, post_office, p2p")
 	_ = fs.Parse(args)
 
 	if strings.TrimSpace(*subject) == "" || strings.TrimSpace(*body) == "" {
@@ -120,6 +123,23 @@ func runCompose(args []string) {
 	}
 
 	msg := core.NewMessage(*subject, *body)
+	if strings.TrimSpace(*allowed) != "" {
+		msg.Meta.Transport.Allowed = parseModes(*allowed)
+	}
+
+	if strings.TrimSpace(*preferred) != "" {
+		msg.Meta.Transport.Preferred = parseModes(*preferred)
+	}
+
+	sess := core.SessionMode(strings.ToLower(strings.TrimSpace(*session)))
+	switch sess {
+	case core.SessionWinlink, core.SessionRadioOnly, core.SessionPostOffice, core.SessionP2P:
+		msg.Meta.Session = sess
+	default:
+		fmt.Println("Invalid -session. Valid: winlink, radio_only, post_office, p2p")
+		return
+	}
+
 	if strings.TrimSpace(*tagCSV) != "" {
 		for _, t := range strings.Split(*tagCSV, ",") {
 			t = strings.TrimSpace(t)
@@ -181,4 +201,19 @@ func runList(args []string) {
 			fmt.Printf("%s  %s\n    %s\n", ts, m.ID, m.Subject)
 		}
 	}
+}
+
+func parseModes(csv string) []core.Mode {
+	var out []core.Mode
+	for _, s := range strings.Split(csv, ",") {
+		s = strings.TrimSpace(strings.ToLower(s))
+		if s == "" {
+			continue
+		}
+		out = append(out, core.Mode(s))
+	}
+	if len(out) == 0 {
+		return []core.Mode{core.ModeAny}
+	}
+	return out
 }
