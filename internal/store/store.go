@@ -163,6 +163,7 @@ type MessageSummary struct {
 	Subject   string
 	CreatedAt time.Time
 	Tags      []string
+	Meta      core.MessageMeta
 }
 
 func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, error) {
@@ -171,7 +172,7 @@ func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, 
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, subject, created_at, tags_json
+		SELECT id, subject, created_at, tags_json, meta_json
 		FROM messages
 		ORDER BY created_at DESC
 		LIMIT ?
@@ -183,8 +184,8 @@ func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, 
 
 	var out []MessageSummary
 	for rows.Next() {
-		var id, subject, createdAtStr, tagsStr string
-		if err := rows.Scan(&id, &subject, &createdAtStr, &tagsStr); err != nil {
+		var id, subject, createdAtStr, tagsStr, metaStr string
+		if err := rows.Scan(&id, &subject, &createdAtStr, &tagsStr, &metaStr); err != nil {
 			return nil, err
 		}
 		t, err := time.Parse(time.RFC3339, createdAtStr)
@@ -194,11 +195,15 @@ func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, 
 		var tags []string
 		_ = json.Unmarshal([]byte(tagsStr), &tags)
 
+		var meta core.MessageMeta
+		_ = json.Unmarshal([]byte(metaStr), &meta)
+
 		out = append(out, MessageSummary{
 			ID:        id,
 			Subject:   subject,
 			CreatedAt: t,
 			Tags:      tags,
+			Meta:      meta,
 		})
 	}
 	if err := rows.Err(); err != nil {

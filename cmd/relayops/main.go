@@ -195,10 +195,32 @@ func runList(args []string) {
 
 	for _, m := range msgs {
 		ts := m.CreatedAt.Local().Format("2006-01-02 15:04:05")
+
+		allow := modesToString(m.Meta.Transport.Allowed)
+		prefer := modesToString(m.Meta.Transport.Preferred)
+		sess := sessionToString(m.Meta.Session)
+
+		// Build a compact metadata suffix
+		var metaParts []string
+		if sess != "" {
+			metaParts = append(metaParts, "session="+sess)
+		}
+		if allow != "" {
+			metaParts = append(metaParts, "allow="+allow)
+		}
+		if prefer != "" {
+			metaParts = append(metaParts, "prefer="+prefer)
+		}
+
+		metaSuffix := ""
+		if len(metaParts) > 0 {
+			metaSuffix = "  " + strings.Join(metaParts, " ")
+		}
+
 		if len(m.Tags) > 0 {
-			fmt.Printf("%s  %s  [%s]\n    %s\n", ts, m.ID, strings.Join(m.Tags, ","), m.Subject)
+			fmt.Printf("%s  %s  [%s]%s\n    %s\n", ts, m.ID, strings.Join(m.Tags, ","), metaSuffix, m.Subject)
 		} else {
-			fmt.Printf("%s  %s\n    %s\n", ts, m.ID, m.Subject)
+			fmt.Printf("%s  %s%s\n    %s\n", ts, m.ID, metaSuffix, m.Subject)
 		}
 	}
 }
@@ -216,4 +238,22 @@ func parseModes(csv string) []core.Mode {
 		return []core.Mode{core.ModeAny}
 	}
 	return out
+}
+
+func modesToString(m []core.Mode) string {
+	if len(m) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(m))
+	for _, x := range m {
+		parts = append(parts, string(x))
+	}
+	return strings.Join(parts, ",")
+}
+
+func sessionToString(s core.SessionMode) string {
+	if s == "" {
+		return string(core.SessionWinlink)
+	}
+	return string(s)
 }
