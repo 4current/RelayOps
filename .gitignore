@@ -1,0 +1,85 @@
+# =====================================
+# RelayOps .gitignore
+# =====================================
+
+# -----------------------------
+# Build artifacts
+# -----------------------------
+
+/bin/
+/build/
+/dist/
+
+# OS-specific binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Coverage output
+*.out
+coverage.*
+*.coverprofile
+
+# -----------------------------
+# Go tooling
+# -----------------------------
+
+go.work
+vendor/
+
+# -----------------------------
+# Runtime state (local)
+# -----------------------------
+
+# User runtime directory
+# Default location: ~/.relayops/
+.relayops/
+
+# Local data directory if ever created inside repo
+/data/
+
+# SQLite files (extra safety)
+*.db
+*.sqlite
+*.sqlite3
+
+# -----------------------------
+# Logs
+# -----------------------------
+
+*.log
+
+# -----------------------------
+# Environment files
+# -----------------------------
+
+.env
+.env.local
+
+# -----------------------------
+# IDE / Editor
+# -----------------------------
+
+.vscode/
+.idea/
+
+*.swp
+*.swo
+
+# -----------------------------
+# macOS
+# -----------------------------
+
+.DS_Store
+
+# -----------------------------
+# Temporary files
+# -----------------------------
+
+tmp/
+*.tmp
+
