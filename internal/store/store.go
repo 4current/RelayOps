@@ -234,6 +234,7 @@ type MessageSummary struct {
 	CreatedAt time.Time
 	Tags      []string
 	Meta      core.MessageMeta
+	Status    core.MessageStatus
 }
 
 func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, error) {
@@ -242,7 +243,7 @@ func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, 
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, subject, created_at, tags_json, meta_json
+		SELECT id, subject, created_at, tags_json, meta_json, status
 		FROM messages
 		ORDER BY created_at DESC
 		LIMIT ?
@@ -254,8 +255,8 @@ func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, 
 
 	var out []MessageSummary
 	for rows.Next() {
-		var id, subject, createdAtStr, tagsStr, metaStr string
-		if err := rows.Scan(&id, &subject, &createdAtStr, &tagsStr, &metaStr); err != nil {
+		var id, subject, createdAtStr, tagsStr, metaStr, statusStr string
+		if err := rows.Scan(&id, &subject, &createdAtStr, &tagsStr, &metaStr, &statusStr); err != nil {
 			return nil, err
 		}
 		t, err := time.Parse(time.RFC3339, createdAtStr)
@@ -274,6 +275,7 @@ func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, 
 			CreatedAt: t,
 			Tags:      tags,
 			Meta:      meta,
+			Status:    core.MessageStatus(statusStr),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -335,7 +337,7 @@ func (s *Store) ListByStatus(ctx context.Context, statuses []core.MessageStatus,
 	args = append(args, limit)
 
 	q := fmt.Sprintf(`
-		SELECT id, subject, created_at, tags_json, meta_json
+		SELECT id, subject, created_at, tags_json, meta_json, status
 		FROM messages
 		WHERE status IN (%s)
 		ORDER BY updated_at DESC
@@ -350,8 +352,8 @@ func (s *Store) ListByStatus(ctx context.Context, statuses []core.MessageStatus,
 
 	var out []MessageSummary
 	for rows.Next() {
-		var id, subject, createdAtStr, tagsStr, metaStr string
-		if err := rows.Scan(&id, &subject, &createdAtStr, &tagsStr, &metaStr); err != nil {
+		var id, subject, createdAtStr, tagsStr, metaStr, statusStr string
+		if err := rows.Scan(&id, &subject, &createdAtStr, &tagsStr, &metaStr, &statusStr); err != nil {
 			return nil, err
 		}
 		t, _ := time.Parse(time.RFC3339, createdAtStr)
@@ -368,7 +370,100 @@ func (s *Store) ListByStatus(ctx context.Context, statuses []core.MessageStatus,
 			CreatedAt: t,
 			Tags:      tags,
 			Meta:      meta,
+			Status:    core.MessageStatus(statusStr),
 		})
 	}
 	return out, rows.Err()
+}
+
+func (s *Store) ListQueued(ctx context.Context, tag string, limit int) ([]*core.Message, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+
+	args := []any{}
+	where := "WHERE status = 'queued'"
+	if strings.TrimSpace(tag) != "" {
+		where += " AND tags_json LIKE ?"
+		args = append(args, "%"+tag+"%")
+	}
+	args = append(args, limit)
+
+	q := fmt.Sprintf(`
+		SELECT id, subject, body, created_at, from_callsign, from_email,
+		       to_json, tags_json, meta_json,
+		       status, updated_at, sent_at, last_error
+		FROM messages
+		%s
+		ORDER BY updated_at ASC
+		LIMIT ?
+	`, where)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("ListQueued: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*core.Message
+	for rows.Next() {
+		var (
+			id, subject, body, createdAtStr string
+			fromCall, fromEmail             sql.NullString
+			toStr, tagsStr, metaStr         string
+			statusStr, updatedAtStr         string
+			sentAtStr                       sql.NullString
+			lastErr                         string
+		)
+
+		if err := rows.Scan(&id, &subject, &body, &createdAtStr, &fromCall, &fromEmail,
+			&toStr, &tagsStr, &metaStr,
+			&statusStr, &updatedAtStr, &sentAtStr, &lastErr,
+		); err != nil {
+			return nil, err
+		}
+
+		createdAt, _ := time.Parse(time.RFC3339, createdAtStr)
+		updatedAt, _ := time.Parse(time.RFC3339, updatedAtStr)
+
+		var to []core.Address
+		_ = json.Unmarshal([]byte(toStr), &to)
+
+		var tags []string
+		_ = json.Unmarshal([]byte(tagsStr), &tags)
+
+		var meta core.MessageMeta
+		_ = json.Unmarshal([]byte(metaStr), &meta)
+
+		var sentAtPtr *time.Time
+		if sentAtStr.Valid {
+			t, err := time.Parse(time.RFC3339, sentAtStr.String)
+			if err == nil {
+				sentAtPtr = &t
+			}
+		}
+
+		out = append(out, &core.Message{
+			ID:        id,
+			Subject:   subject,
+			Body:      body,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+			From: core.Address{
+				Callsign: fromCall.String,
+				Email:    fromEmail.String,
+			},
+			To:        to,
+			Tags:      tags,
+			Meta:      meta,
+			Status:    core.MessageStatus(statusStr),
+			SentAt:    sentAtPtr,
+			LastError: lastErr,
+		})
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) MarkSending(ctx context.Context, id string) error {
+	return s.SetStatusByID(ctx, id, core.StatusSending, "")
 }

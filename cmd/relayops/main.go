@@ -53,6 +53,9 @@ func main() {
 	case "mark-failed":
 		runMarkFailed(os.Args[2:])
 
+	case "send":
+		runSend(os.Args[2:])
+
 	default:
 		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
 		printUsage()
@@ -72,6 +75,7 @@ func printUsage() {
 	fmt.Println("  relayops queue -tag winlink_wednesday")
 	fmt.Println("  relayops mark-sent -id <message-id>")
 	fmt.Println("  relayops mark-failed -id <message-id> -err \"reason\"")
+	fmt.Println("  relayops send [-tag t] [-n 25]  Send queued messages (simulated for now)")
 	fmt.Println("")
 }
 
@@ -305,8 +309,15 @@ func runOutbox(args []string) {
 		prefer := modesToString(m.Meta.Transport.Preferred)
 		sess := sessionToString(m.Meta.Session)
 
-		fmt.Printf("%s  %s  session=%s allow=%s prefer=%s\n    %s\n",
-			ts, m.ID, sess, allow, prefer, m.Subject)
+		fmt.Printf("%s  %s  status=%s  session=%s allow=%s prefer=%s\n    %s\n",
+			ts,
+			m.ID,
+			m.Status,
+			sess,
+			allow,
+			prefer,
+			m.Subject,
+		)
 	}
 }
 
@@ -391,4 +402,90 @@ func runMarkFailed(args []string) {
 		return
 	}
 	fmt.Println("Marked failed:", *id)
+}
+
+func runSend(args []string) {
+	fs := flag.NewFlagSet("send", flag.ContinueOnError)
+	tag := fs.String("tag", "", "only send queued messages with this tag")
+	n := fs.Int("n", 25, "max messages to send")
+	_ = fs.Parse(args)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	msgs, err := st.ListQueued(ctx, *tag, *n)
+	if err != nil {
+		fmt.Printf("send: list queued failed: %v\n", err)
+		return
+	}
+	if len(msgs) == 0 {
+		fmt.Println("(no queued messages)")
+		return
+	}
+
+	// Sim transport for now (swap later with PAT)
+	tx := NewSimTransport()
+
+	var sent, failed int
+	for _, m := range msgs {
+		// Basic session sanity: P2P should not use telnet-only allow list
+		if m.Meta.Session == core.SessionP2P && containsMode(m.Meta.Transport.Allowed, core.ModeTelnet) {
+			_ = st.SetStatusByID(ctx, m.ID, core.StatusFailed, "session p2p incompatible with telnet allow-list")
+			failed++
+			continue
+		}
+
+		// Move to sending
+		if err := st.MarkSending(ctx, m.ID); err != nil {
+			fmt.Printf("mark sending failed (%s): %v\n", m.ID, err)
+			failed++
+			continue
+		}
+
+		// Send
+		if err := tx.SendOne(ctx, m); err != nil {
+			_ = st.SetStatusByID(ctx, m.ID, core.StatusFailed, err.Error())
+			failed++
+			continue
+		}
+
+		_ = st.SetStatusByID(ctx, m.ID, core.StatusSent, "")
+		sent++
+		fmt.Printf("Sent: %s  %q\n", m.ID, m.Subject)
+	}
+
+	fmt.Printf("Send complete. sent=%d failed=%d\n", sent, failed)
+}
+
+type SimTransport struct{}
+
+func NewSimTransport() *SimTransport { return &SimTransport{} }
+
+func (t *SimTransport) SendOne(ctx context.Context, m *core.Message) error {
+	// Minimal “policy” use: if allowed list is empty, accept. If it contains "any", accept.
+	// Otherwise accept as long as it doesn't explicitly forbid everything (we're simulating).
+	if len(m.Meta.Transport.Allowed) == 0 || containsMode(m.Meta.Transport.Allowed, core.ModeAny) {
+		return nil
+	}
+	// If someone explicitly set allowed only to telnet but session is radio_only, fail
+	if m.Meta.Session == core.SessionRadioOnly && containsMode(m.Meta.Transport.Allowed, core.ModeTelnet) && len(m.Meta.Transport.Allowed) == 1 {
+		return fmt.Errorf("radio_only session cannot be telnet-only")
+	}
+	return nil
+}
+
+func containsMode(list []core.Mode, x core.Mode) bool {
+	for _, m := range list {
+		if m == x {
+			return true
+		}
+	}
+	return false
 }
