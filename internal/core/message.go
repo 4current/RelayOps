@@ -46,6 +46,10 @@ type Message struct {
 	Tags      []string
 	CreatedAt time.Time
 	Meta      MessageMeta
+	Status    MessageStatus
+	UpdatedAt time.Time
+	SentAt    *time.Time
+	LastError string
 }
 
 type MessageMeta struct {
@@ -62,12 +66,26 @@ type Constraints struct {
 	PlainTextOnly     bool
 }
 
+type MessageStatus string
+
+const (
+	StatusDraft   MessageStatus = "draft"
+	StatusQueued  MessageStatus = "queued"
+	StatusSending MessageStatus = "sending"
+	StatusSent    MessageStatus = "sent"
+	StatusFailed  MessageStatus = "failed"
+)
+
 func NewMessage(subject, body string) *Message {
+	now := time.Now()
 	return &Message{
 		ID:        uuid.NewString(),
 		Subject:   subject,
 		Body:      body,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
+		UpdatedAt: now,
+		Status:    StatusDraft,
+		LastError: "",
 		Meta:      DefaultMeta(),
 	}
 }

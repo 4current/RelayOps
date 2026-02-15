@@ -41,6 +41,18 @@ func main() {
 	case "list":
 		runList(os.Args[2:])
 
+	case "outbox":
+		runOutbox(os.Args[2:])
+
+	case "queue":
+		runQueue(os.Args[2:])
+
+	case "mark-sent":
+		runMarkSent(os.Args[2:])
+
+	case "mark-failed":
+		runMarkFailed(os.Args[2:])
+
 	default:
 		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
 		printUsage()
@@ -56,6 +68,10 @@ func printUsage() {
 	fmt.Println("  relayops init")
 	fmt.Println("  relayops compose -s \"subject\" -b \"body\" [-t tag1,tag2] [-allow ...] [-prefer ...] [-session winlink|radio_only|post_office|p2p]")
 	fmt.Println("  relayops list [-n 25]")
+	fmt.Println("  relayops outbox [-n 25]")
+	fmt.Println("  relayops queue -tag winlink_wednesday")
+	fmt.Println("  relayops mark-sent -id <message-id>")
+	fmt.Println("  relayops mark-failed -id <message-id> -err \"reason\"")
 	fmt.Println("")
 }
 
@@ -256,4 +272,123 @@ func sessionToString(s core.SessionMode) string {
 		return string(core.SessionWinlink)
 	}
 	return string(s)
+}
+
+func runOutbox(args []string) {
+	fs := flag.NewFlagSet("outbox", flag.ContinueOnError)
+	n := fs.Int("n", 25, "number of messages")
+	_ = fs.Parse(args)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	msgs, err := st.ListByStatus(ctx, []core.MessageStatus{core.StatusDraft, core.StatusQueued, core.StatusFailed}, *n)
+	if err != nil {
+		fmt.Printf("outbox failed: %v\n", err)
+		return
+	}
+	if len(msgs) == 0 {
+		fmt.Println("(outbox empty)")
+		return
+	}
+
+	for _, m := range msgs {
+		ts := m.CreatedAt.Local().Format("2006-01-02 15:04:05")
+		allow := modesToString(m.Meta.Transport.Allowed)
+		prefer := modesToString(m.Meta.Transport.Preferred)
+		sess := sessionToString(m.Meta.Session)
+
+		fmt.Printf("%s  %s  session=%s allow=%s prefer=%s\n    %s\n",
+			ts, m.ID, sess, allow, prefer, m.Subject)
+	}
+}
+
+func runQueue(args []string) {
+	fs := flag.NewFlagSet("queue", flag.ContinueOnError)
+	tag := fs.String("tag", "", "tag to queue (required)")
+	_ = fs.Parse(args)
+
+	if strings.TrimSpace(*tag) == "" {
+		fmt.Println("queue requires -tag")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	n, err := st.QueueByTag(ctx, *tag)
+	if err != nil {
+		fmt.Printf("queue failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Queued %d message(s) with tag: %s\n", n, *tag)
+}
+
+func runMarkSent(args []string) {
+	fs := flag.NewFlagSet("mark-sent", flag.ContinueOnError)
+	id := fs.String("id", "", "message id (required)")
+	_ = fs.Parse(args)
+
+	if strings.TrimSpace(*id) == "" {
+		fmt.Println("mark-sent requires -id")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	if err := st.SetStatusByID(ctx, *id, core.StatusSent, ""); err != nil {
+		fmt.Printf("mark-sent failed: %v\n", err)
+		return
+	}
+	fmt.Println("Marked sent:", *id)
+}
+
+func runMarkFailed(args []string) {
+	fs := flag.NewFlagSet("mark-failed", flag.ContinueOnError)
+	id := fs.String("id", "", "message id (required)")
+	errMsg := fs.String("err", "send failed", "error message")
+	_ = fs.Parse(args)
+
+	if strings.TrimSpace(*id) == "" {
+		fmt.Println("mark-failed requires -id")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	if err := st.SetStatusByID(ctx, *id, core.StatusFailed, *errMsg); err != nil {
+		fmt.Printf("mark-failed failed: %v\n", err)
+		return
+	}
+	fmt.Println("Marked failed:", *id)
 }
