@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/4current/relayops/internal/core"
+	"github.com/4current/relayops/internal/ops"
 	"github.com/4current/relayops/internal/runtime"
 	"github.com/4current/relayops/internal/store"
+	"github.com/4current/relayops/internal/transport/sim"
 )
 
 var (
@@ -420,48 +422,13 @@ func runSend(args []string) {
 	}
 	defer func() { _ = st.Close() }()
 
-	msgs, err := st.ListQueued(ctx, *tag, *n)
+	res, err := ops.SendQueued(ctx, st, *tag, *n, sim.New())
 	if err != nil {
-		fmt.Printf("send: list queued failed: %v\n", err)
-		return
-	}
-	if len(msgs) == 0 {
-		fmt.Println("(no queued messages)")
+		fmt.Println("send failed:", err)
 		return
 	}
 
-	// Sim transport for now (swap later with PAT)
-	tx := NewSimTransport()
-
-	var sent, failed int
-	for _, m := range msgs {
-		// Basic session sanity: P2P should not use telnet-only allow list
-		if m.Meta.Session == core.SessionP2P && containsMode(m.Meta.Transport.Allowed, core.ModeTelnet) {
-			_ = st.SetStatusByID(ctx, m.ID, core.StatusFailed, "session p2p incompatible with telnet allow-list")
-			failed++
-			continue
-		}
-
-		// Move to sending
-		if err := st.MarkSending(ctx, m.ID); err != nil {
-			fmt.Printf("mark sending failed (%s): %v\n", m.ID, err)
-			failed++
-			continue
-		}
-
-		// Send
-		if err := tx.SendOne(ctx, m); err != nil {
-			_ = st.SetStatusByID(ctx, m.ID, core.StatusFailed, err.Error())
-			failed++
-			continue
-		}
-
-		_ = st.SetStatusByID(ctx, m.ID, core.StatusSent, "")
-		sent++
-		fmt.Printf("Sent: %s  %q\n", m.ID, m.Subject)
-	}
-
-	fmt.Printf("Send complete. sent=%d failed=%d\n", sent, failed)
+	fmt.Printf("Send complete. sent=%d failed=%d\n", res.Sent, res.Failed)
 }
 
 type SimTransport struct{}
