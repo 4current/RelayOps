@@ -84,22 +84,17 @@ func printUsage() {
 func runDoctor() {
 	fmt.Println("Running diagnostics...")
 
-	dir, err := runtime.EnsureAppDir()
-	if err != nil {
-		fmt.Printf("✘ runtime dir: %v\n", err)
-		return
-	}
-	fmt.Printf("✔ runtime dir: %s\n", dir)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	st, err := store.Open(ctx)
-	if err != nil {
-		fmt.Printf("✘ store open: %v\n", err)
+	if err := ops.Doctor(ctx); err != nil {
+		fmt.Printf("✘ doctor failed: %v\n", err)
 		return
 	}
-	_ = st.Close()
+
+	// Optional: keep the detailed lines for user friendliness
+	dir, _ := runtime.AppDir()
+	fmt.Printf("✔ runtime dir: %s\n", dir)
 	fmt.Println("✔ sqlite store: OK")
 
 	testMsg := core.NewMessage("Test Subject", "Test Body")
@@ -109,23 +104,27 @@ func runDoctor() {
 }
 
 func runInit() {
+	fmt.Println("Initializing RelayOps...")
+
+	// Friendly check 1: runtime dir
 	dir, err := runtime.EnsureAppDir()
 	if err != nil {
-		fmt.Printf("Init failed: %v\n", err)
+		fmt.Printf("✘ runtime dir: %v\n", err)
 		return
 	}
+	fmt.Printf("✔ runtime dir: %s\n", dir)
 
+	// Canonical init logic (includes SQLite open + migrate)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	st, err := store.Open(ctx)
-	if err != nil {
-		fmt.Printf("Init failed (store): %v\n", err)
+	if err := ops.InitRuntime(ctx); err != nil {
+		fmt.Printf("✘ sqlite store: %v\n", err)
 		return
 	}
-	_ = st.Close()
+	fmt.Println("✔ sqlite store: OK")
 
-	fmt.Printf("Initialized RelayOps runtime at: %s\n", dir)
+	fmt.Println("Initialization complete.")
 }
 
 func runCompose(args []string) {

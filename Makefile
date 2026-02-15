@@ -31,7 +31,13 @@ doctor:
 	go run $(CMD_PATH) doctor
 
 test:
-	go test ./... -v -race -cover
+	go test ./... -v -race -coverpkg=./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -n 20
+
+cover:
+	go test ./... -coverpkg=./... -coverprofile=coverage.out
+	gocover-cobertura < coverage.out > coverage.xml
+	go tool cover -func=coverage.out
 
 fmt:
 	go fmt ./...
