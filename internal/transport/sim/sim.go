@@ -11,21 +11,22 @@ type Sender struct{}
 
 func New() *Sender { return &Sender{} }
 
-func (s *Sender) SendOne(ctx context.Context, m *core.Message) error {
+func (s *Sender) SendOne(ctx context.Context, m *core.Message) (string, error) {
+	_ = ctx
+
 	// Accept by default.
 	if len(m.Meta.Transport.Allowed) == 0 || contains(m.Meta.Transport.Allowed, core.ModeAny) {
-		return nil
+		return "SIM-OK", nil
 	}
 
-	// Example rule to force a deterministic failure in tests:
-	// radio_only session cannot be telnet-only
+	// Deterministic failure used by tests:
 	if m.Meta.Session == core.SessionRadioOnly &&
 		len(m.Meta.Transport.Allowed) == 1 &&
 		m.Meta.Transport.Allowed[0] == core.ModeTelnet {
-		return fmt.Errorf("radio_only session cannot be telnet-only")
+		return "", fmt.Errorf("radio_only session cannot be telnet-only")
 	}
 
-	return nil
+	return "SIM-OK", nil
 }
 
 func contains(list []core.Mode, x core.Mode) bool {

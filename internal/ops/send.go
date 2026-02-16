@@ -9,7 +9,7 @@ import (
 )
 
 type Sender interface {
-	SendOne(ctx context.Context, m *core.Message) error
+	SendOne(ctx context.Context, m *core.Message) (string, error)
 }
 
 type SendResult struct {
@@ -45,12 +45,15 @@ func SendQueued(ctx context.Context, st *store.Store, tag string, limit int, sen
 			continue
 		}
 
-		if err := sender.SendOne(ctx, m); err != nil {
+		mid, err := sender.SendOne(ctx, m)
+		if err != nil {
 			_ = st.SetStatusByID(ctx, m.ID, core.StatusFailed, err.Error())
 			res.Failed++
 			continue
 		}
 
+		// SUCCESS PATH
+		_ = st.SetPatMIDByID(ctx, m.ID, mid)
 		_ = st.SetStatusByID(ctx, m.ID, core.StatusSent, "")
 		res.Sent++
 	}

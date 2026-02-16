@@ -58,6 +58,15 @@ type MessageMeta struct {
 	Constraints       Constraints
 	AutomationProfile string
 	Priority          int
+	Delivery          DeliveryResult `json:"delivery,omitempty"`
+}
+
+type DeliveryResult struct {
+	PatMID     string `json:"pat_mid,omitempty"`
+	PatService string `json:"pat_service,omitempty"`
+	// Optional later:
+	// SentAt     time.Time `json:"sent_at,omitempty"`
+	// LastAttempt time.Time `json:"last_attempt,omitempty"`
 }
 
 type Constraints struct {
@@ -74,6 +83,7 @@ const (
 	StatusSending MessageStatus = "sending"
 	StatusSent    MessageStatus = "sent"
 	StatusFailed  MessageStatus = "failed"
+	StatusDeleted MessageStatus = "deleted"
 )
 
 func NewMessage(subject, body string) *Message {
@@ -100,5 +110,8 @@ func DefaultMeta() MessageMeta {
 		Constraints:       Constraints{},
 		AutomationProfile: "",
 		Priority:          0,
+		Delivery: DeliveryResult{
+			PatMID: "",
+		},
 	}
 }
