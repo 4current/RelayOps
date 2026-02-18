@@ -6,12 +6,14 @@ import (
 	"fmt"
 
 	"github.com/4current/relayops/internal/core"
+	"github.com/4current/relayops/internal/runtime"
 )
 
 func (s *Store) SetPatMIDByID(ctx context.Context, id, patMID string) error {
 	// Deprecated: keep for compatibility with older code paths.
 	// New code should call UpsertExternalRef(ctx, messageID, "pat", patMID, patService, metaJSON).
-	_ = s.UpsertExternalRef(ctx, id, "pat", patMID, "", "{}")
+	scope := runtime.IdentityScope("")
+	_ = s.UpsertExternalRef(ctx, id, "pat", patMID, scope, "{}")
 
 	// Fetch current meta_json
 	var metaJSON string

@@ -188,7 +188,7 @@ func (s *Store) applyV3(ctx context.Context) error {
 	}
 
 	// Backfill external refs from existing meta_json (PAT integration).
-	rows, err := tx.QueryContext(ctx, `SELECT id, meta_json FROM messages`)
+	rows, err := tx.QueryContext(ctx, `SELECT id, meta_json, from_callsign FROM messages`)
 	if err != nil {
 		return fmt.Errorf("apply v3: scan messages: %w", err)
 	}
@@ -196,8 +196,8 @@ func (s *Store) applyV3(ctx context.Context) error {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	for rows.Next() {
-		var id, metaJSON string
-		if err := rows.Scan(&id, &metaJSON); err != nil {
+		var id, metaJSON, fromCallsign string
+		if err := rows.Scan(&id, &metaJSON, &fromCallsign); err != nil {
 			return fmt.Errorf("apply v3: row scan: %w", err)
 		}
 
@@ -211,7 +211,7 @@ func (s *Store) applyV3(ctx context.Context) error {
 		}
 
 		refID := uuid.NewString()
-		scope := meta.Delivery.PatService
+		scope := runtime.IdentityScope(fromCallsign)
 		_, _ = tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO message_external_refs(
 				id, message_id, backend, external_id, scope, meta_json, created_at, updated_at

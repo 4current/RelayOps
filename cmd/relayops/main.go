@@ -13,6 +13,7 @@ import (
 	"github.com/4current/relayops/internal/runtime"
 	"github.com/4current/relayops/internal/store"
 	"github.com/4current/relayops/internal/transport/pat"
+	"github.com/4current/relayops/internal/transport/winlink"
 )
 
 var (
@@ -61,6 +62,9 @@ func main() {
 	case "delete":
 		runDelete(os.Args[2:])
 
+	case "winlink-import":
+		runWinlinkImport(os.Args[2:])
+
 	default:
 		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
 		printUsage()
@@ -81,7 +85,36 @@ func printUsage() {
 	fmt.Println("  relayops mark-sent -id <message-id>")
 	fmt.Println("  relayops mark-failed -id <message-id> -err \"reason\"")
 	fmt.Println("  relayops send [-tag t] [-n 25]  Send queued messages (simulated for now)")
+	fmt.Println("  relayops winlink-import -root \"/path/to/RMS Express/AE4OK\"  Import Winlink Express messages into the canonical store")
 	fmt.Println("")
+}
+
+func runWinlinkImport(args []string) {
+	fs := flag.NewFlagSet("winlink-import", flag.ContinueOnError)
+	root := fs.String("root", "", "Winlink Express callsign directory (contains Data/Registry.txt and Messages/*.mime)")
+	_ = fs.Parse(args)
+
+	if strings.TrimSpace(*root) == "" {
+		fmt.Println("winlink-import requires -root")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	report, err := winlink.ImportFromWinlinkExpress(ctx, st, *root)
+	if err != nil {
+		fmt.Printf("winlink import failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Winlink import complete. Scanned=%d Created=%d Updated=%d Errors=%d\n", report.Scanned, report.Created, report.Updated, report.Errors)
 }
 
 func runDoctor() {
