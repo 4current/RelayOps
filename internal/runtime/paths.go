@@ -26,6 +26,12 @@ func EnsureAppDir() (string, error) {
 }
 
 func DBPath() (string, error) {
+	// Allow override for advanced setups (e.g., DB on a different disk/host-mounted path).
+	// Keep the default simple for most users.
+	if v := os.Getenv("RELAYOPS_DB"); v != "" {
+		return v, nil
+	}
+
 	dir, err := EnsureAppDir()
 	if err != nil {
 		return "", err

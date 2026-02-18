@@ -53,7 +53,7 @@ func SendQueued(ctx context.Context, st *store.Store, tag string, limit int, sen
 		}
 
 		// SUCCESS PATH
-		_ = st.SetPatMIDByID(ctx, m.ID, mid)
+		_ = st.UpsertExternalRef(ctx, m.ID, "pat", mid, m.Meta.Delivery.PatService, "{}")
 		_ = st.SetStatusByID(ctx, m.ID, core.StatusSent, "")
 		res.Sent++
 	}

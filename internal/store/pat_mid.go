@@ -9,6 +9,10 @@ import (
 )
 
 func (s *Store) SetPatMIDByID(ctx context.Context, id, patMID string) error {
+	// Deprecated: keep for compatibility with older code paths.
+	// New code should call UpsertExternalRef(ctx, messageID, "pat", patMID, patService, metaJSON).
+	_ = s.UpsertExternalRef(ctx, id, "pat", patMID, "", "{}")
+
 	// Fetch current meta_json
 	var metaJSON string
 	if err := s.db.QueryRowContext(ctx,
