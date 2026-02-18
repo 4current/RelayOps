@@ -12,7 +12,7 @@ import (
 	"github.com/4current/relayops/internal/ops"
 	"github.com/4current/relayops/internal/runtime"
 	"github.com/4current/relayops/internal/store"
-	"github.com/4current/relayops/internal/transport/sim"
+	"github.com/4current/relayops/internal/transport/pat"
 )
 
 var (
@@ -58,6 +58,9 @@ func main() {
 	case "send":
 		runSend(os.Args[2:])
 
+	case "delete":
+		runDelete(os.Args[2:])
+
 	default:
 		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
 		printUsage()
@@ -82,7 +85,6 @@ func printUsage() {
 }
 
 func runDoctor() {
-	fmt.Println("Running diagnostics...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -92,15 +94,6 @@ func runDoctor() {
 		return
 	}
 
-	// Optional: keep the detailed lines for user friendliness
-	dir, _ := runtime.AppDir()
-	fmt.Printf("✔ runtime dir: %s\n", dir)
-	fmt.Println("✔ sqlite store: OK")
-
-	testMsg := core.NewMessage("Test Subject", "Test Body")
-	fmt.Printf("✔ message model OK (ID: %s)\n", testMsg.ID)
-
-	fmt.Println("Diagnostics complete.")
 }
 
 func runInit() {
@@ -135,6 +128,7 @@ func runCompose(args []string) {
 	allowed := fs.String("allow", "", "allowed modes (comma-separated), e.g. packet,ardop,vara_hf")
 	preferred := fs.String("prefer", "", "preferred modes (comma-separated), e.g. packet,vara_fm,telnet")
 	session := fs.String("session", "winlink", "session mode: winlink, radio_only, post_office, p2p")
+	to := fs.String("to", "", "recipient callsign or email, e.g. AE4OK or AE4OK@winlink.org")
 	_ = fs.Parse(args)
 
 	if strings.TrimSpace(*subject) == "" || strings.TrimSpace(*body) == "" {
@@ -144,6 +138,16 @@ func runCompose(args []string) {
 	}
 
 	msg := core.NewMessage(*subject, *body)
+
+	t := strings.TrimSpace(*to)
+	if t != "" {
+		if strings.Contains(t, "@") {
+			msg.To = append(msg.To, core.Address{Email: t})
+		} else {
+			msg.To = append(msg.To, core.Address{Callsign: t})
+		}
+	}
+
 	if strings.TrimSpace(*allowed) != "" {
 		msg.Meta.Transport.Allowed = parseModes(*allowed)
 	}
@@ -191,6 +195,7 @@ func runCompose(args []string) {
 func runList(args []string) {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	n := fs.Int("n", 25, "number of messages")
+	showAll := fs.Bool("all", false, "include deleted messages")
 	_ = fs.Parse(args)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -203,7 +208,7 @@ func runList(args []string) {
 	}
 	defer func() { _ = st.Close() }()
 
-	msgs, err := st.ListMessages(ctx, *n)
+	msgs, err := st.ListMessages(ctx, *n, *showAll)
 	if err != nil {
 		fmt.Printf("list failed: %v\n", err)
 		return
@@ -220,9 +225,13 @@ func runList(args []string) {
 		allow := modesToString(m.Meta.Transport.Allowed)
 		prefer := modesToString(m.Meta.Transport.Preferred)
 		sess := sessionToString(m.Meta.Session)
+		pat_id := m.Meta.Delivery.PatMID
 
 		// Build a compact metadata suffix
 		var metaParts []string
+		if pat_id != "" {
+			metaParts = append(metaParts, "pat="+pat_id)
+		}
 		if sess != "" {
 			metaParts = append(metaParts, "session="+sess)
 		}
@@ -239,10 +248,11 @@ func runList(args []string) {
 		}
 
 		if len(m.Tags) > 0 {
-			fmt.Printf("%s  %s  [%s]%s\n    %s\n", ts, m.ID, strings.Join(m.Tags, ","), metaSuffix, m.Subject)
+			fmt.Printf("%s [%s] %s  [%s]%s\n    %s\n", ts, m.Status, m.ID, strings.Join(m.Tags, ","), metaSuffix, m.Subject)
 		} else {
-			fmt.Printf("%s  %s%s\n    %s\n", ts, m.ID, metaSuffix, m.Subject)
+			fmt.Printf("%s [%s] %s%s\n    %s\n", ts, m.Status, m.ID, metaSuffix, m.Subject)
 		}
+
 	}
 }
 
@@ -421,13 +431,46 @@ func runSend(args []string) {
 	}
 	defer func() { _ = st.Close() }()
 
-	res, err := ops.SendQueued(ctx, st, *tag, *n, sim.New())
+	cfg, cfgPath, err := pat.LoadConfig()
+	if err != nil {
+		return
+	}
+	// optionally: fmt.Printf("Using PAT config: %s (mycall=%s)\n", cfgPath, cfg.MyCall)
+	_ = cfgPath
+	res, err := ops.SendQueued(ctx, st, *tag, *n, pat.New(cfg.MyCall))
 	if err != nil {
 		fmt.Println("send failed:", err)
 		return
 	}
 
 	fmt.Printf("Send complete. sent=%d failed=%d\n", res.Sent, res.Failed)
+}
+
+func runDelete(args []string) {
+	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
+	id := fs.String("id", "", "message id (required)")
+	_ = fs.Parse(args)
+
+	if strings.TrimSpace(*id) == "" {
+		fmt.Println("delete requires -id")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	if _, err := st.DeleteByID(ctx, *id); err != nil {
+		fmt.Printf("delete failed: %v\n", err)
+		return
+	}
+	fmt.Println("Deleted message:", *id)
 }
 
 type SimTransport struct{}

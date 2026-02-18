@@ -237,17 +237,18 @@ type MessageSummary struct {
 	Status    core.MessageStatus
 }
 
-func (s *Store) ListMessages(ctx context.Context, limit int) ([]MessageSummary, error) {
+func (s *Store) ListMessages(ctx context.Context, limit int, includeDeleted bool) ([]MessageSummary, error) {
 	if limit <= 0 {
 		limit = 25
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, subject, created_at, tags_json, meta_json, status
-		FROM messages
-		ORDER BY created_at DESC
-		LIMIT ?
-	`, limit)
+	query := `SELECT id, subject, created_at, tags_json, meta_json, status FROM messages`
+	if !includeDeleted {
+		query += ` WHERE status != 'deleted'`
+	}
+	query += ` ORDER BY created_at DESC LIMIT ?`
+
+	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("ListMessages: %w", err)
 	}
@@ -295,7 +296,7 @@ func (s *Store) SetStatusByID(ctx context.Context, id string, status core.Messag
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE messages
 		SET status = ?, updated_at = ?, sent_at = COALESCE(?, sent_at), last_error = ?
-		WHERE id = ?
+		WHERE id = ? AND status != 'deleted'
 	`, string(status), now, sentAt, lastErr, id)
 
 	if err != nil {
@@ -466,4 +467,15 @@ func (s *Store) ListQueued(ctx context.Context, tag string, limit int) ([]*core.
 
 func (s *Store) MarkSending(ctx context.Context, id string) error {
 	return s.SetStatusByID(ctx, id, core.StatusSending, "")
+}
+
+func (s *Store) DeleteByID(ctx context.Context, id string) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE messages SET status = ? WHERE id = ? AND status != ?`,
+		core.StatusDeleted, id, core.StatusDeleted,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
