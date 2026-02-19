@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/4current/relayops/internal/core"
-	"github.com/4current/relayops/internal/runtime"
 	"github.com/4current/relayops/internal/store"
 	"github.com/google/uuid"
 )
@@ -31,7 +30,7 @@ type ImportReport struct {
 //
 // root must point at the callsign directory (e.g. .../RMS Express/AE4OK).
 //
-func ImportFromWinlinkExpress(ctx context.Context, st *store.Store, root string) (*ImportReport, error) {
+func ImportFromWinlinkExpress(ctx context.Context, st *store.Store, root string, scope string) (*ImportReport, error) {
 	if st == nil {
 		return nil, fmt.Errorf("ImportFromWinlinkExpress: store is nil")
 	}
@@ -40,10 +39,10 @@ func ImportFromWinlinkExpress(ctx context.Context, st *store.Store, root string)
 		return nil, err
 	}
 
-	// Winlink Express roots are typically .../RMS Express/<CALLSIGN>. Use that as the mailbox identity for scope.
-	// Station name is supplied via RELAYOPS_STATION (default "default").
-	call := strings.ToUpper(strings.TrimSpace(filepath.Base(filepath.Clean(root))))
-	scope := runtime.IdentityScope(call)
+	// Scope is provided by caller (global operational container identity).
+	if strings.TrimSpace(scope) == "" {
+		return nil, fmt.Errorf("ImportFromWinlinkExpress: scope is required")
+	}
 
 	report := &ImportReport{Scanned: len(recs)}
 	for _, rec := range recs {

@@ -19,6 +19,7 @@ const (
 	schemaV1 = 1
 	schemaV2 = 2
 	schemaV3 = 3
+	schemaV4 = 4
 )
 
 type Store struct {
@@ -143,7 +144,18 @@ func (s *Store) migrate(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+
+	applied4, err := s.hasMigration(ctx, schemaV4)
+	if err != nil {
+	    return err
+	}
+	if !applied4 {
+	    if err := s.applyV4(ctx); err != nil {
+	        return err
+	    }
+	}
+	
+		return nil
 }
 
 func (s *Store) applyV3(ctx context.Context) error {
@@ -577,4 +589,43 @@ func (s *Store) DeleteByID(ctx context.Context, id string) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+
+
+func (s *Store) applyV4(ctx context.Context) error {
+    tx, err := s.db.BeginTx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer func() { _ = tx.Rollback() }()
+
+    // Global scopes table. Scope is an operational container identity (e.g., AE4OK@general).
+    stmts := []string{
+        `CREATE TABLE IF NOT EXISTS scopes (
+            scope TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT ''
+        );`,
+    }
+    for _, q := range stmts {
+        if _, err := tx.ExecContext(ctx, q); err != nil {
+            return fmt.Errorf("apply schema v4: %w", err)
+        }
+    }
+
+    // Backfill scopes from existing external refs (exclude empty scope).
+    now := time.Now().UTC().Format(time.RFC3339)
+    if _, err := tx.ExecContext(ctx, `
+        INSERT OR IGNORE INTO scopes(scope, created_at, note)
+        SELECT DISTINCT scope, ?, '' FROM message_external_refs WHERE scope <> ''
+    `, now); err != nil {
+        return fmt.Errorf("apply v4: backfill scopes: %w", err)
+    }
+
+    if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`, schemaV4, now); err != nil {
+        return fmt.Errorf("apply v4: record migration: %w", err)
+    }
+
+    return tx.Commit()
 }
