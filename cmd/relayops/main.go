@@ -128,21 +128,25 @@ func runPatImport(args []string) {
 	defer func() { _ = st.Close() }()
 
 	exists, err := st.ScopeExists(ctx, scope)
-	if err != nil {
-		fmt.Printf("scope check failed: %v\n", err)
-		return
-	}
 	if !exists {
 		if !*allowNewScope {
-			fmt.Printf("Refusing to create new scope '%s'. Create it first with: relayops scope create -scope %s\n(or re-run with -allow-new-scope)\n", scope, scope)
+			fmt.Printf(
+				"Refusing to create new scope '%s'.\nCreate it first with: relayops scope create -scope %s\n(or re-run with -allow-new-scope)\n",
+				scope, scope,
+			)
 			return
 		}
-		if err := st.CreateScope(ctx, scope, ""); err != nil {
+
+		fmt.Printf(
+			"WARNING: Creating new operational scope '%s'. This should be rare.\n",
+			scope,
+		)
+
+		if err := st.CreateScope(ctx, scope, "auto-created by import"); err != nil {
 			fmt.Printf("create scope failed: %v\n", err)
 			return
 		}
 	}
-
 	report, err := pat.ImportFromMailbox(ctx, st, *patBin, *mbox, *callsign, scope)
 	if err != nil {
 		fmt.Printf("pat import failed: %v\n", err)
@@ -183,21 +187,25 @@ func runWinlinkImport(args []string) {
 	defer func() { _ = st.Close() }()
 
 	exists, err := st.ScopeExists(ctx, scope)
-	if err != nil {
-		fmt.Printf("scope check failed: %v\n", err)
-		return
-	}
 	if !exists {
 		if !*allowNewScope {
-			fmt.Printf("Refusing to create new scope '%s'. Create it first with: relayops scope create -scope %s\n(or re-run with -allow-new-scope)\n", scope, scope)
+			fmt.Printf(
+				"Refusing to create new scope '%s'.\nCreate it first with: relayops scope create -scope %s\n(or re-run with -allow-new-scope)\n",
+				scope, scope,
+			)
 			return
 		}
-		if err := st.CreateScope(ctx, scope, ""); err != nil {
+
+		fmt.Printf(
+			"WARNING: Creating new operational scope '%s'. This should be rare.\n",
+			scope,
+		)
+
+		if err := st.CreateScope(ctx, scope, "auto-created by import"); err != nil {
 			fmt.Printf("create scope failed: %v\n", err)
 			return
 		}
 	}
-
 	report, err := winlink.ImportFromWinlinkExpress(ctx, st, *root, scope)
 	if err != nil {
 		fmt.Printf("winlink import failed: %v\n", err)
