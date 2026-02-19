@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/4current/relayops/internal/runtime"
 	"github.com/4current/relayops/internal/store"
 	"github.com/4current/relayops/internal/transport/pat"
+	"github.com/4current/relayops/internal/transport/winlink"
 )
 
 var (
@@ -61,6 +63,15 @@ func main() {
 	case "delete":
 		runDelete(os.Args[2:])
 
+	case "winlink-import":
+		runWinlinkImport(os.Args[2:])
+
+	case "pat-import":
+		runPatImport(os.Args[2:])
+
+	case "scope":
+		runScope(os.Args[2:])
+
 	default:
 		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
 		printUsage()
@@ -78,10 +89,129 @@ func printUsage() {
 	fmt.Println("  relayops list [-n 25]")
 	fmt.Println("  relayops outbox [-n 25]")
 	fmt.Println("  relayops queue -tag winlink_wednesday")
+	fmt.Println("  relayops scope list")
+	fmt.Println("  relayops scope create -scope AE4OK@general [-note \"...\" ]")
 	fmt.Println("  relayops mark-sent -id <message-id>")
 	fmt.Println("  relayops mark-failed -id <message-id> -err \"reason\"")
 	fmt.Println("  relayops send [-tag t] [-n 25]  Send queued messages (simulated for now)")
+	fmt.Println("  relayops winlink-import -root \"/path/to/RMS Express/AE4OK\"  Import Winlink Express messages into the canonical store")
+	fmt.Println("  relayops pat-import [-mbox \"/path/to/pat/mailbox\"]  Import PAT mailbox messages into the canonical store")
 	fmt.Println("")
+}
+
+func runPatImport(args []string) {
+	fs := flag.NewFlagSet("pat-import", flag.ContinueOnError)
+	mbox := fs.String("mbox", defaultPatMailboxDir(), "Path to PAT mailbox directory")
+	callsign := fs.String("callsign", "", "Callsign (defaults to RELAYOPS_CALLSIGN)")
+	scopeFlag := fs.String("scope", "", "Operational scope/container (e.g., AE4OK@general). If empty, derived from RELAYOPS_CALLSIGN/RELAYOPS_STATION.")
+	allowNewScope := fs.Bool("allow-new-scope", false, "Allow creating a new global scope if it does not already exist")
+	patBin := fs.String("pat", "pat", "Path to pat binary (default 'pat' in PATH)")
+	_ = fs.Parse(args)
+
+	scope := strings.TrimSpace(*scopeFlag)
+	if scope == "" {
+		scope = runtime.IdentityScope("")
+	}
+	if scope == "" {
+		fmt.Println("pat-import requires a scope (set RELAYOPS_CALLSIGN/RELAYOPS_STATION or pass -scope)")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	exists, err := st.ScopeExists(ctx, scope)
+	if !exists {
+		if !*allowNewScope {
+			fmt.Printf(
+				"Refusing to create new scope '%s'.\nCreate it first with: relayops scope create -scope %s\n(or re-run with -allow-new-scope)\n",
+				scope, scope,
+			)
+			return
+		}
+
+		fmt.Printf(
+			"WARNING: Creating new operational scope '%s'. This should be rare.\n",
+			scope,
+		)
+
+		if err := st.CreateScope(ctx, scope, "auto-created by import"); err != nil {
+			fmt.Printf("create scope failed: %v\n", err)
+			return
+		}
+	}
+	report, err := pat.ImportFromMailbox(ctx, st, *patBin, *mbox, *callsign, scope)
+	if err != nil {
+		fmt.Printf("pat import failed: %v\n", err)
+		return
+	}
+	fmt.Printf("PAT import complete. Scope=%s Scanned=%d Created=%d Updated=%d Errors=%d\n", scope, report.Scanned, report.Created, report.Updated, report.Errors)
+}
+
+func runWinlinkImport(args []string) {
+	fs := flag.NewFlagSet("winlink-import", flag.ContinueOnError)
+	root := fs.String("root", "", "Winlink Express callsign directory (contains Data/Registry.txt and Messages/*.mime)")
+	scopeFlag := fs.String("scope", "", "Operational scope/container (e.g., AE4OK@general). If empty, derived from RELAYOPS_CALLSIGN/RELAYOPS_STATION.")
+	allowNewScope := fs.Bool("allow-new-scope", false, "Allow creating a new global scope if it does not already exist")
+	_ = fs.Parse(args)
+
+	if strings.TrimSpace(*root) == "" {
+		fmt.Println("winlink-import requires -root")
+		return
+	}
+
+	scope := strings.TrimSpace(*scopeFlag)
+	if scope == "" {
+		scope = runtime.IdentityScope("")
+	}
+	if scope == "" {
+		fmt.Println("winlink-import requires a scope (set RELAYOPS_CALLSIGN/RELAYOPS_STATION or pass -scope)")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	st, err := store.Open(ctx)
+	if err != nil {
+		fmt.Printf("store open failed: %v\n", err)
+		return
+	}
+	defer func() { _ = st.Close() }()
+
+	exists, err := st.ScopeExists(ctx, scope)
+	if !exists {
+		if !*allowNewScope {
+			fmt.Printf(
+				"Refusing to create new scope '%s'.\nCreate it first with: relayops scope create -scope %s\n(or re-run with -allow-new-scope)\n",
+				scope, scope,
+			)
+			return
+		}
+
+		fmt.Printf(
+			"WARNING: Creating new operational scope '%s'. This should be rare.\n",
+			scope,
+		)
+
+		if err := st.CreateScope(ctx, scope, "auto-created by import"); err != nil {
+			fmt.Printf("create scope failed: %v\n", err)
+			return
+		}
+	}
+	report, err := winlink.ImportFromWinlinkExpress(ctx, st, *root, scope)
+	if err != nil {
+		fmt.Printf("winlink import failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Winlink import complete. Scope=%s Scanned=%d Created=%d Updated=%d Errors=%d\n", scope, report.Scanned, report.Created, report.Updated, report.Errors)
 }
 
 func runDoctor() {
@@ -497,4 +627,72 @@ func containsMode(list []core.Mode, x core.Mode) bool {
 		}
 	}
 	return false
+}
+
+func runScope(args []string) {
+	if len(args) < 1 {
+		fmt.Println("Usage:")
+		fmt.Println("  relayops scope list")
+		fmt.Println("  relayops scope create -scope AE4OK@general [-note \"...\"]")
+		return
+	}
+	sub := args[0]
+	switch sub {
+	case "list":
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		st, err := store.Open(ctx)
+		if err != nil {
+			fmt.Printf("store open failed: %v\n", err)
+			return
+		}
+		defer func() { _ = st.Close() }()
+		scopes, err := st.ListScopes(ctx)
+		if err != nil {
+			fmt.Printf("list scopes failed: %v\n", err)
+			return
+		}
+		if len(scopes) == 0 {
+			fmt.Println("(no scopes)")
+			return
+		}
+		for _, sc := range scopes {
+			note := sc.Note
+			if strings.TrimSpace(note) != "" {
+				fmt.Printf("%s\t%s\n", sc.Scope, note)
+			} else {
+				fmt.Println(sc.Scope)
+			}
+		}
+	case "create":
+		fs := flag.NewFlagSet("scope create", flag.ContinueOnError)
+		scope := fs.String("scope", "", "Scope to create (e.g., AE4OK@general)")
+		note := fs.String("note", "", "Optional note/description")
+		_ = fs.Parse(args[1:])
+		if strings.TrimSpace(*scope) == "" {
+			fmt.Println("scope create requires -scope")
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		st, err := store.Open(ctx)
+		if err != nil {
+			fmt.Printf("store open failed: %v\n", err)
+			return
+		}
+		defer func() { _ = st.Close() }()
+		if err := st.CreateScope(ctx, strings.TrimSpace(*scope), strings.TrimSpace(*note)); err != nil {
+			fmt.Printf("create scope failed: %v\n", err)
+			return
+		}
+		fmt.Printf("Scope created (or already existed): %s\n", strings.TrimSpace(*scope))
+	default:
+		fmt.Printf("Unknown scope subcommand: %s\n", sub)
+	}
+}
+
+func defaultPatMailboxDir() string {
+	// Keep in sync with PAT defaults; user can override via -mbox or pat --mbox.
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library", "Application Support", "pat", "mailbox")
 }

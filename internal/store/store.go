@@ -12,11 +12,14 @@ import (
 
 	"github.com/4current/relayops/internal/core"
 	"github.com/4current/relayops/internal/runtime"
+	"github.com/google/uuid"
 )
 
 const (
 	schemaV1 = 1
 	schemaV2 = 2
+	schemaV3 = 3
+	schemaV4 = 4
 )
 
 type Store struct {
@@ -131,7 +134,115 @@ func (s *Store) migrate(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+
+	applied3, err := s.hasMigration(ctx, schemaV3)
+	if err != nil {
+		return err
+	}
+	if !applied3 {
+		if err := s.applyV3(ctx); err != nil {
+			return err
+		}
+	}
+
+	applied4, err := s.hasMigration(ctx, schemaV4)
+	if err != nil {
+	    return err
+	}
+	if !applied4 {
+	    if err := s.applyV4(ctx); err != nil {
+	        return err
+	    }
+	}
+	
+		return nil
+}
+
+func (s *Store) applyV3(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS message_external_refs (
+			id TEXT PRIMARY KEY,
+			message_id TEXT NOT NULL,
+			backend TEXT NOT NULL,
+			external_id TEXT NOT NULL,
+			scope TEXT NOT NULL DEFAULT '',
+			meta_json TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE (backend, external_id, scope),
+			FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_msg_external_refs_message_id ON message_external_refs(message_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_msg_external_refs_backend ON message_external_refs(backend);`,
+
+		`CREATE TABLE IF NOT EXISTS message_backend_state (
+			message_id TEXT NOT NULL,
+			backend TEXT NOT NULL,
+			folder TEXT NOT NULL DEFAULT '',
+			state TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL,
+			extra_json TEXT NOT NULL DEFAULT '{}',
+			PRIMARY KEY (message_id, backend),
+			FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+		);`,
+	}
+
+	for _, q := range stmts {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("apply schema v3: %w", err)
+		}
+	}
+
+	// Backfill external refs from existing meta_json (PAT integration).
+	rows, err := tx.QueryContext(ctx, `SELECT id, meta_json, from_callsign FROM messages`)
+	if err != nil {
+		return fmt.Errorf("apply v3: scan messages: %w", err)
+	}
+	defer rows.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for rows.Next() {
+		var id, metaJSON, fromCallsign string
+		if err := rows.Scan(&id, &metaJSON, &fromCallsign); err != nil {
+			return fmt.Errorf("apply v3: row scan: %w", err)
+		}
+
+		var meta core.MessageMeta
+		if metaJSON != "" {
+			_ = json.Unmarshal([]byte(metaJSON), &meta) // best-effort
+		}
+
+		if meta.Delivery.PatMID == "" {
+			continue
+		}
+
+		refID := uuid.NewString()
+		scope := runtime.IdentityScope(fromCallsign)
+		_, _ = tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO message_external_refs(
+				id, message_id, backend, external_id, scope, meta_json, created_at, updated_at
+			) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+			refID, id, "pat", meta.Delivery.PatMID, scope, "{}", now, now,
+		)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("apply v3: rows err: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`,
+		schemaV3, now,
+	); err != nil {
+		return fmt.Errorf("record migration v3: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func (s *Store) applyV2(ctx context.Context) error {
@@ -478,4 +589,43 @@ func (s *Store) DeleteByID(ctx context.Context, id string) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+
+
+func (s *Store) applyV4(ctx context.Context) error {
+    tx, err := s.db.BeginTx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer func() { _ = tx.Rollback() }()
+
+    // Global scopes table. Scope is an operational container identity (e.g., AE4OK@general).
+    stmts := []string{
+        `CREATE TABLE IF NOT EXISTS scopes (
+            scope TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT ''
+        );`,
+    }
+    for _, q := range stmts {
+        if _, err := tx.ExecContext(ctx, q); err != nil {
+            return fmt.Errorf("apply schema v4: %w", err)
+        }
+    }
+
+    // Backfill scopes from existing external refs (exclude empty scope).
+    now := time.Now().UTC().Format(time.RFC3339)
+    if _, err := tx.ExecContext(ctx, `
+        INSERT OR IGNORE INTO scopes(scope, created_at, note)
+        SELECT DISTINCT scope, ?, '' FROM message_external_refs WHERE scope <> ''
+    `, now); err != nil {
+        return fmt.Errorf("apply v4: backfill scopes: %w", err)
+    }
+
+    if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`, schemaV4, now); err != nil {
+        return fmt.Errorf("apply v4: record migration: %w", err)
+    }
+
+    return tx.Commit()
 }

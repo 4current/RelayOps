@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/4current/relayops/internal/core"
+	"github.com/4current/relayops/internal/runtime"
 	"github.com/4current/relayops/internal/store"
 )
 
@@ -53,7 +54,8 @@ func SendQueued(ctx context.Context, st *store.Store, tag string, limit int, sen
 		}
 
 		// SUCCESS PATH
-		_ = st.SetPatMIDByID(ctx, m.ID, mid)
+		scope := runtime.IdentityScope(m.From.Callsign)
+		_ = st.UpsertExternalRef(ctx, m.ID, "pat", mid, scope, "{}")
 		_ = st.SetStatusByID(ctx, m.ID, core.StatusSent, "")
 		res.Sent++
 	}
