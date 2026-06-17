@@ -24,16 +24,19 @@ func CollectStatus(ctx context.Context) Status {
 		Host:      host,
 		Timestamp: time.Now(),
 		Files: map[string]bool{
-			"ts890_audio": exists("/dev/snd/by-radio/ts890-control"),
-			"tty890A":     exists("/dev/tty890A"),
-			"tty890B":     exists("/dev/tty890B"),
+			"ts890_audio":  exists("/dev/snd/by-radio/ts890-control"),
+			"tty890A":      exists("/dev/tty890A"),
+			"tty890B":      exists("/dev/tty890B"),
+			"ic9700_audio": exists("/dev/snd/by-radio/ic9700-control"),
+			"tty9700A":     exists("/dev/tty9700A"),
+			"tty9700B":     exists("/dev/tty9700B"),
 		},
 		TCP: map[string]bool{
 			"rigctld_ts890": tcpOpen("127.0.0.1:4532"),
 			"ardopcf_ts890": tcpOpen("127.0.0.1:8515"),
 		},
 		Processes: map[string]bool{
-			"rigctld":    processExists(ctx, "rigctld"),
+			"rigctld":    processExists(ctx, "rigctld-wsjtx"),
 			"ardopcf":    processExists(ctx, "ardopcf"),
 			"soundmodem": processExists(ctx, "soundmodem"),
 		},
