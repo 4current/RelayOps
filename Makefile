@@ -24,6 +24,9 @@ build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(APP_NAME) $(CMD_PATH)
 	@echo "Built $(BUILD_DIR)/$(APP_NAME)"
 
+agent:
+	go build -o ./bin/relayops-agent ./cmd/relayops-agent
+
 run:
 	go run $(CMD_PATH)
 
