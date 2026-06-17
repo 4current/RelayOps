@@ -32,8 +32,9 @@ func CollectStatus(ctx context.Context) Status {
 			"tty9700B":     exists("/dev/tty9700B"),
 		},
 		TCP: map[string]bool{
-			"rigctld_ts890": tcpOpen("127.0.0.1:4532"),
-			"ardopcf_ts890": tcpOpen("127.0.0.1:8515"),
+			"rigctld_ts890":  tcpOpen("127.0.0.1:4532"),
+			"rigctld_ic9700": tcpOpen("127.0.0.1:4533"),
+			"ardopcf_ts890":  tcpOpen("127.0.0.1:8515"),
 		},
 		Processes: map[string]bool{
 			"rigctld":    processExists(ctx, "rigctld-wsjtx"),
