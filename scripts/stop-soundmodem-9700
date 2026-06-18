@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sudo killall kissattach 2>/dev/null || true
+pkill -x soundmodem 2>/dev/null || true
+echo "stopped soundmodem and kissattach"
+
