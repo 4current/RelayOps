@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-pkill -x ardopcf || true
-echo "stopped ardopcf"
-
