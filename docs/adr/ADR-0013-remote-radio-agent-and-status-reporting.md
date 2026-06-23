@@ -1,13 +1,13 @@
-# ADR-XXXX: Title
+# ADR-0013 Remote radio agent and status reporting
 
-Date: YYYY-MM-DD  
-Status: Proposed / Accepted / Superseded
+Date: 2026-06-17
+Status: Proposed
 
 ---
 
 ## Context
 
-Describe the problem and why a decision is needed.
+RelayOps will be composed of aloose collecyion of tools running on different machines with networking between them. Need a management control center. RelayOps needs a reliable way to know which radio resources are present, busy, or available before starting mode-specific workflows.
 
 ---
 
@@ -21,7 +21,13 @@ Option 3
 
 ## Decision
 
-Describe the chosen approach.
+Introduce a lightweight relayops-agent process on radio hosts such as Graviton.
+Purpose: Expose read-only status for radios, audio devices, CAT daemons, TNC/modem processes, and TCP listeners.
+
+Initial behavior: GET /status only.
+
+Deferred: Start/stop control, scheduling, authentication, multi-host orchestration.
+
 
 ---
 

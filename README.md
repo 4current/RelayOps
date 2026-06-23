@@ -84,4 +84,20 @@ Early scaffold. Initial milestones:
 ### Build
 ```bash
 go build ./...
+```
+
+### Running Notes
+After adding Ardop and packet.
+HF:
+  PAT(Mac) + remote ardopcf + rigctld validated.
+
+Packet:
+  soundmodem + AX.25 + PAT(libax25) validated via KG4MRA-10.
+
+Agent:
+  /status endpoint operational on Graviton.
+
+Architecture lesson:
+  Messages belong on Earth.
+  Radio resources belong on Graviton.
 
