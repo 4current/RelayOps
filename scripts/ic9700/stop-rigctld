@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pkill -f "rigctld.*4533" || true
+echo "stopped rigctld-9700"
+
