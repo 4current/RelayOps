@@ -63,6 +63,7 @@ BIN := $(HOME)/bin
 install-scripts:
 	mkdir -p $(BIN)
 
+	ln -sf $(PWD)/scripts/relayops-env.sh $(BIN)/relayops-env.sh
 	ln -sf $(PWD)/scripts/ts890/start-ardop  $(BIN)/start-ardop-ts890
 	ln -sf $(PWD)/scripts/ts890/stop-ardop   $(BIN)/stop-ardop-ts890
 
