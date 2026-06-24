@@ -58,3 +58,19 @@ clean:
 install:
 	go install $(LDFLAGS) $(CMD_PATH)
 
+BIN := $(HOME)/bin
+
+install-scripts:
+	mkdir -p $(BIN)
+
+	ln -sf $(PWD)/scripts/ts890/start-ardop  $(BIN)/start-ardop-ts890
+	ln -sf $(PWD)/scripts/ts890/stop-ardop   $(BIN)/stop-ardop-ts890
+
+	ln -sf $(PWD)/scripts/ts890/start-rigctl $(BIN)/start-rigctl-ts890
+	ln -sf $(PWD)/scripts/ts890/stop-rigctl  $(BIN)/stop-rigctl-ts890
+
+	ln -sf $(PWD)/scripts/ic9700/start-packet $(BIN)/start-packet-ic9700
+	ln -sf $(PWD)/scripts/ic9700/stop-packet  $(BIN)/stop-packet-ic9700
+
+	ln -sf $(PWD)/scripts/ic9700/start-rigctl $(BIN)/start-rigctl-ic9700
+	ln -sf $(PWD)/scripts/ic9700/stop-rigctl  $(BIN)/stop-rigctl-ic9700
