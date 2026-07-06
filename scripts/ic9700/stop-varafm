@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_REAL="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_REAL")"
+
+export EXE="$HOME/.cxoffice/Winlink/drive_c/VARAFM/VARAFM.exe"
+
+exec "$SCRIPT_DIR/../common/stop-crossover-app"

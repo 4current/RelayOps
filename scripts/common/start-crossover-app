@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+
+: "${BOTTLE:?BOTTLE required}"
+: "${EXE:?EXE required}"
+: "${LOGFILE:?LOGFILE required}"
+PROCESS="$(basename "$EXE")"
+
+if [[ ! -f "$EXE" ]]; then
+    echo "Cannot find $EXE"
+    exit 2
+fi
+
+if pgrep -f "$PROCESS" >/dev/null; then
+  echo "$PROCESS already running"
+  exit 0
+fi
+
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+
+nohup /opt/cxoffice/bin/cxrun \
+    --bottle "$BOTTLE" \
+    --command "$EXE" \
+    > "$LOGFILE" 2>&1 &
+
+for i in {1..15}; do
+    if MYPID=$(pgrep -f "$PROCESS"); then
+        echo "started $PROCESS pid=$MYPID"
+        exit 0      
+    fi
+    sleep 1
+done
+
+echo "ERROR: $PROCESS failed to start"
+exit 1
+

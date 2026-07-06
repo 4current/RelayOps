@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${EXE:?EXE required}"
+PROCESS="$(basename "$EXE")"
+
+if ! pgrep -f "$PROCESS" >/dev/null; then
+    echo "$PROCESS not running"
+    exit 0
+fi
+
+pkill -f "$PROCESS"
+
+# Wait for shutdown
+for i in {1..10}; do
+    if ! pgrep -f "$PROCESS" >/dev/null; then
+        echo "stopped $PROCESS"
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "ERROR: $PROCESS failed to stop"
+exit 1
+

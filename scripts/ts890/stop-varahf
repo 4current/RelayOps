@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_REAL="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_REAL")"
+
+export BOTTLE="Winlink"
+export EXE="$HOME/.cxoffice/Winlink/drive_c/VARA/VARA.exe"
+export LOGFILE="$HOME/varahf-ts890.log"
+
+exec "$SCRIPT_DIR/../common/stop-crossover-app"

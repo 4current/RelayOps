@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_REAL="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_REAL")"
+
+export BOTTLE="Winlink"
+
+VARAFM_DIR="$HOME/.cxoffice/$BOTTLE/drive_c/VARA FM"
+VARAFM_LINK="$HOME/.cxoffice/$BOTTLE/drive_c/VARAFM"
+ln -sfn "$VARAFM_DIR" "$VARAFM_LINK"
+export EXE="$VARAFM_LINK/VARAFM.exe"
+export LOGFILE="$HOME/varafm-ic9700.log"
+
+exec "$SCRIPT_DIR/../common/start-crossover-app"
