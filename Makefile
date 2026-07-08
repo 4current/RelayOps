@@ -63,15 +63,18 @@ BIN := $(HOME)/bin
 install-scripts:
 	mkdir -p $(BIN)
 
-	ln -sf $(PWD)/scripts/relayops-env.sh $(BIN)/relayops-env.sh
-	ln -sf $(PWD)/scripts/ts890/start-ardop  $(BIN)/start-ardop-ts890
-	ln -sf $(PWD)/scripts/ts890/stop-ardop   $(BIN)/stop-ardop-ts890
+	# TS-890
+	ln -sfn $(PWD)/scripts/ts890/start-ardop  $(BIN)/start-ardop-ts890
+	ln -sfn $(PWD)/scripts/ts890/stop-ardop   $(BIN)/stop-ardop-ts890
+	ln -sfn $(PWD)/scripts/ts890/start-rigctl $(BIN)/start-rigctl-ts890
+	ln -sfn $(PWD)/scripts/ts890/stop-rigctl  $(BIN)/stop-rigctl-ts890
+	ln -sfn $(PWD)/scripts/ts890/start-varahf  $(BIN)/start-varahf-ts890
+	ln -sfn $(PWD)/scripts/ts890/stop-varahf   $(BIN)/stop-varahf-ts890
 
-	ln -sf $(PWD)/scripts/ts890/start-rigctl $(BIN)/start-rigctl-ts890
-	ln -sf $(PWD)/scripts/ts890/stop-rigctl  $(BIN)/stop-rigctl-ts890
-
-	ln -sf $(PWD)/scripts/ic9700/start-packet $(BIN)/start-packet-ic9700
-	ln -sf $(PWD)/scripts/ic9700/stop-packet  $(BIN)/stop-packet-ic9700
-
-	ln -sf $(PWD)/scripts/ic9700/start-rigctl $(BIN)/start-rigctl-ic9700
-	ln -sf $(PWD)/scripts/ic9700/stop-rigctl  $(BIN)/stop-rigctl-ic9700
+	# IC-9700
+	ln -sfn $(PWD)/scripts/ic9700/start-packet $(BIN)/start-packet-ic9700
+	ln -sfn $(PWD)/scripts/ic9700/stop-packet  $(BIN)/stop-packet-ic9700
+	ln -sfn $(PWD)/scripts/ic9700/start-rigctl $(BIN)/start-rigctl-ic9700
+	ln -sfn $(PWD)/scripts/ic9700/stop-rigctl  $(BIN)/stop-rigctl-ic9700
+	ln -sfn $(PWD)/scripts/ic9700/start-varafm $(BIN)/start-varafm-ic9700
+	ln -sfn $(PWD)/scripts/ic9700/stop-varafm  $(BIN)/stop-varafm-ic9700

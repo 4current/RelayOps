@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_REAL="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_REAL")"
+
+source "$SCRIPT_DIR/../common/relayops-env.sh"
 
 if pgrep -x ardopcf >/dev/null; then
   echo "ardopcf already running"
   exit 0
 fi
-
-source "$(dirname "$0")/relayops-env.sh"
 
 echo "TS890_CARD=$TS890_CARD"
 nohup ardopcf 8515 "plughw:${TS890_CARD},0" "plughw:${TS890_CARD},0" \
