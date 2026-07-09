@@ -10,11 +10,12 @@ import (
 )
 
 type Status struct {
-	Host      string          `json:"host"`
-	Timestamp time.Time       `json:"timestamp"`
-	Files     map[string]bool `json:"files"`
-	TCP       map[string]bool `json:"tcp"`
-	Processes map[string]bool `json:"processes"`
+	Host      string                   `json:"host"`
+	Timestamp time.Time                `json:"timestamp"`
+	Files     map[string]bool          `json:"files"`
+	TCP       map[string]bool          `json:"tcp"`
+	Processes map[string]bool          `json:"processes"`
+	Services  map[string]ServiceStatus `json:"services"`
 }
 
 func CollectStatus(ctx context.Context) Status {
@@ -24,12 +25,12 @@ func CollectStatus(ctx context.Context) Status {
 		Host:      host,
 		Timestamp: time.Now(),
 		Files: map[string]bool{
-			"ts890_audio":  exists("/dev/snd/by-radio/ts890-control"),
-			"tty890A":      exists("/dev/tty890A"),
-			"tty890B":      exists("/dev/tty890B"),
-			"ic9700_audio": exists("/dev/snd/by-radio/ic9700-control"),
-			"tty9700A":     exists("/dev/tty9700A"),
-			"tty9700B":     exists("/dev/tty9700B"),
+			"ts890_audio":  fileExists("/dev/snd/by-radio/ts890-control"),
+			"tty890A":      fileExists("/dev/tty890A"),
+			"tty890B":      fileExists("/dev/tty890B"),
+			"ic9700_audio": fileExists("/dev/snd/by-radio/ic9700-control"),
+			"tty9700A":     fileExists("/dev/tty9700A"),
+			"tty9700B":     fileExists("/dev/tty9700B"),
 		},
 		TCP: map[string]bool{
 			"rigctld_ts890":  tcpOpen("127.0.0.1:4532"),
@@ -41,10 +42,11 @@ func CollectStatus(ctx context.Context) Status {
 			"ardopcf":    processExists(ctx, "ardopcf"),
 			"soundmodem": processExists(ctx, "soundmodem"),
 		},
+		Services: CollectServiceStatuses(ctx),
 	}
 }
 
-func exists(path string) bool {
+func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
