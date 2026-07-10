@@ -1,104 +1,140 @@
 package agent
 
-import (
-	"context"
-)
-
 type ServiceDef struct {
-	Name        string   `json:"name"`
-	Kind        string   `json:"kind"`
-	ProcessName string   `json:"process_name"`
-	Resources   []string `json:"resources"`
-	TCPChecks   []string `json:"tcp_checks,omitempty"`
-	FileChecks  []string `json:"file_checks,omitempty"`
-	StartCmd    []string `json:"-"`
-	StopCmd     []string `json:"-"`
+	Name string   `json:"name"`
+	Kind string   `json:"kind"`
+	Uses []string `json:"uses"`
+
+	Checks   []CheckRef `json:"checks"`
+	StartCmd []string   `json:"-"`
+	StopCmd  []string   `json:"-"`
 }
 
-var ServiceCatalog = map[string]ServiceDef{
-	"rigctld-ts890": {
-		Name:        "rigctld-ts890",
-		Kind:        "cat",
-		ProcessName: "rigctld",
-		Resources:   []string{"ts890_cat"},
-		TCPChecks:   []string{"127.0.0.1:4532"},
-	},
-	"ardop-ts890": {
-		Name:        "ardop-ts890",
-		Kind:        "modem",
-		ProcessName: "ardopcf",
-		Resources:   []string{"ts890_audio"},
-		TCPChecks:   []string{"127.0.0.1:8515"},
-		StartCmd:    []string{"start-ardop-ts890"},
-		StopCmd:     []string{"stop-ardop-ts890"},
-	},
-	"varahf-ts890": {
-		Name:        "varahf-ts890",
-		Kind:        "modem",
-		ProcessName: "VARA.exe",
-		Resources:   []string{"ts890_audio"},
-		TCPChecks:   []string{"127.0.0.1:8300"},
-		StartCmd:    []string{"start-varahf-ts890"},
-		StopCmd:     []string{"stop-varahf-ts890"},
-	},
-	"soundmodem-ic9700": {
-		Name:        "soundmodem-ic9700",
-		Kind:        "modem",
-		ProcessName: "soundmodem",
-		Resources:   []string{"ic9700_audio"},
-		FileChecks:  []string{"/dev/soundmodem0"},
-		StartCmd:    []string{"start-packet-ic9700"},
-		StopCmd:     []string{"stop-packet-ic9700"},
-	},
-	"rigctld-ic9700": {
-		Name:        "rigctld-ic9700",
-		Kind:        "cat",
-		ProcessName: "rigctld",
-		Resources:   []string{"ic9700_cat"},
-		TCPChecks:   []string{"127.0.0.1:4533"},
-	},
-	"varafm-ic9700": {
-		Name:        "varafm-ic9700",
-		Kind:        "modem",
-		ProcessName: "VARAFM.exe",
-		Resources:   []string{"ic9700_audio"},
-		TCPChecks:   []string{"127.0.0.1:8300"},
-		StartCmd:    []string{"start-varafm-ic9700"},
-		StopCmd:     []string{"stop-varafm-ic9700"},
-	},
+type CheckRef struct {
+	Kind string `json:"kind"` // file, tcp, process
+	Key  string `json:"key"`
 }
 
 type ServiceStatus struct {
-	Name      string          `json:"name"`
-	Kind      string          `json:"kind"`
-	Running   bool            `json:"running"`
-	Resources []string        `json:"resources"`
-	TCP       map[string]bool `json:"tcp,omitempty"`
-	Files     map[string]bool `json:"files,omitempty"`
+	Name   string          `json:"name"`
+	Kind   string          `json:"kind"`
+	Uses   []string        `json:"uses"`
+	Ready  bool            `json:"ready"`
+	Checks map[string]bool `json:"checks"`
 }
 
-func CollectServiceStatuses(ctx context.Context) map[string]ServiceStatus {
-	out := make(map[string]ServiceStatus)
+type ServiceStatuses map[string]ServiceStatus
 
-	for name, def := range ServiceCatalog {
-		st := ServiceStatus{
-			Name:      def.Name,
-			Kind:      def.Kind,
-			Running:   processExists(ctx, def.ProcessName),
-			Resources: def.Resources,
-			TCP:       map[string]bool{},
-			Files:     map[string]bool{},
+var ServiceCatalog = map[string]ServiceDef{
+	"rigctld-ts890": {
+		Name: "rigctld-ts890",
+		Kind: "cat",
+		Uses: []string{"ts890_cat"},
+		Checks: []CheckRef{
+			{Kind: "tcp", Key: "rigctld_ts890"},
+		},
+		StartCmd: []string{"start-rigctl-ts890"},
+		StopCmd:  []string{"stop-rigctl-ts890"},
+	},
+
+	"ardop-ts890": {
+		Name: "ardop-ts890",
+		Kind: "modem",
+		Uses: []string{"ts890_audio"},
+		Checks: []CheckRef{
+			{Kind: "process", Key: "ardopcf"},
+			{Kind: "tcp", Key: "ardopcf_ts890"},
+			{Kind: "file", Key: "ts890_audio"},
+		},
+		StartCmd: []string{"start-ardop-ts890"},
+		StopCmd:  []string{"stop-ardop-ts890"},
+	},
+
+	"varahf-ts890": {
+		Name: "varahf-ts890",
+		Kind: "modem",
+		Uses: []string{"ts890_audio"},
+		Checks: []CheckRef{
+			{Kind: "process", Key: "varahf"},
+			{Kind: "tcp", Key: "varahf"},
+		},
+		StartCmd: []string{"start-varahf-ts890"},
+		StopCmd:  []string{"stop-varahf-ts890"},
+	},
+
+	"rigctld-ic9700": {
+		Name: "rigctld-ic9700",
+		Kind: "cat",
+		Uses: []string{"ic9700_cat"},
+		Checks: []CheckRef{
+			{Kind: "tcp", Key: "rigctld_ic9700"},
+		},
+		StartCmd: []string{"start-rigctl-ic9700"},
+		StopCmd:  []string{"stop-rigctl-ic9700"},
+	},
+
+	"soundmodem-ic9700": {
+		Name: "soundmodem-ic9700",
+		Kind: "modem",
+		Uses: []string{"ic9700_audio"},
+		Checks: []CheckRef{
+			{Kind: "process", Key: "soundmodem"},
+			{Kind: "file", Key: "soundmodem0"},
+		},
+		StartCmd: []string{"start-packet-ic9700"},
+		StopCmd:  []string{"stop-packet-ic9700"},
+	},
+
+	"varafm-ic9700": {
+		Name: "varafm-ic9700",
+		Kind: "modem",
+		Uses: []string{"ic9700_audio"},
+		Checks: []CheckRef{
+			{Kind: "process", Key: "varafm"},
+			{Kind: "tcp", Key: "varafm"},
+		},
+		StartCmd: []string{"start-varafm-ic9700"},
+		StopCmd:  []string{"stop-varafm-ic9700"},
+	},
+}
+
+func EvaluateServices(facts Facts) ServiceStatuses {
+	out := make(ServiceStatuses)
+
+	for id, def := range ServiceCatalog {
+		checks := make(map[string]bool)
+		ready := true
+
+		for _, chk := range def.Checks {
+			label := chk.Kind + ":" + chk.Key
+			ok := checkFact(facts, chk)
+			checks[label] = ok
+			if !ok {
+				ready = false
+			}
 		}
 
-		for _, addr := range def.TCPChecks {
-			st.TCP[addr] = tcpOpen(addr)
+		out[id] = ServiceStatus{
+			Name:   def.Name,
+			Kind:   def.Kind,
+			Uses:   def.Uses,
+			Ready:  ready,
+			Checks: checks,
 		}
-		for _, path := range def.FileChecks {
-			st.Files[path] = fileExists(path)
-		}
-
-		out[name] = st
 	}
 
 	return out
+}
+
+func checkFact(facts Facts, chk CheckRef) bool {
+	switch chk.Kind {
+	case "file":
+		return facts.Files[chk.Key]
+	case "tcp":
+		return facts.TCP[chk.Key]
+	case "process":
+		return facts.Processes[chk.Key]
+	default:
+		return false
+	}
 }
