@@ -53,7 +53,7 @@ func CollectFacts(ctx context.Context) Facts {
 			"ardopcf_ts890":  tcpOpen("127.0.0.1:8515"),
 			"varahf":         tcpOpen("127.0.0.1:8300"),
 			"varafm":         tcpOpen("127.0.0.1:8301"),
-			
+		},
 		Processes: map[string]bool{
 			"rigctld":    processExists(ctx, "rigctld"),
 			"ardopcf":    processExists(ctx, "ardopcf"),
