@@ -17,7 +17,7 @@ func NewServer(ctx context.Context) *Server {
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/status", s.handleStatus)
+	mux.HandleFunc("/v1/status", s.handleStatus)
 	mux.HandleFunc("/v1/services", s.handleServices)
 	return mux
 }
