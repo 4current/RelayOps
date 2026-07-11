@@ -19,7 +19,7 @@ relayops_ic9700_card() {
 }
 
 TS890_CARD="$(relayops_ts890_card)"
-IC9700_CARD="$relayops_ic9700_card)"
+IC9700_CARD="$(relayops_ic9700_card)"
 
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
