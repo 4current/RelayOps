@@ -1,17 +1,60 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/relayops"
+KISS_DEVICE="$RUNTIME_DIR/soundmodem0"
+CONFIG="$RUNTIME_DIR/soundmodem-ic9700.conf"
+LOG="$HOME/soundmodem-ic9700.log"
+
+mkdir -p "$RUNTIME_DIR"
+rm -f "$KISS_DEVICE"
+
+sed \
+  "s|file=\"/dev/soundmodem0\"|file=\"$KISS_DEVICE\"|" \
+  /etc/ax25/soundmodem.conf >"$CONFIG"
+
 if pgrep -x soundmodem >/dev/null; then
-  echo "soundmodem already running"
+    echo "soundmodem already running"
 else
-  soundmodem -s -c ax25 /etc/ax25/soundmodem.conf
-  echo "started soundmodem"
+    nohup /usr/sbin/soundmodem -s -c ax25 "$CONFIG" \
+      >"$LOG" 2>&1 &
+    echo "starting soundmodem"
+fi
+
+for _ in {1..40}; do
+    if [[ -e "$KISS_DEVICE" ]]; then
+        echo "started soundmodem"
+        break
+    fi
+
+    if ! pgrep -x soundmodem >/dev/null; then
+        echo "ERROR: soundmodem exited"
+        tail -30 "$LOG"
+        exit 1
+    fi
+
+    sleep 0.25
+done
+
+if [[ ! -e "$KISS_DEVICE" ]]; then
+    echo "ERROR: $KISS_DEVICE was not created"
+    tail -30 "$LOG"
+    exit 1
+fi
+
+if ip link show ax0 >/dev/null 2>&1; then
+    echo "AX.25 interface ax0 already attached"
+else
+    sudo -n /usr/sbin/kissattach "$KISS_DEVICE" icom
+    echo "attached AX.25 port icom"
 fi
 
 if ! ip link show ax0 >/dev/null 2>&1; then
-  sudo kissattach /dev/soundmodem0 icom
-  echo "attached AX.25 port icom"
-else
-  echo "ax0 already exists"
+
+  echo "ERROR: ax0 was not created"
+
+  exit 1
+
 fi
 
+echo "packet service ready"
