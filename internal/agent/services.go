@@ -80,6 +80,7 @@ var ServiceCatalog = map[string]ServiceDef{
 		Checks: []CheckRef{
 			{Kind: "process", Key: "soundmodem"},
 			{Kind: "file", Key: "soundmodem0"},
+			{Kind: "interface", Key: "ax0"},
 		},
 		StartCmd: []string{"start-packet-ic9700"},
 		StopCmd:  []string{"stop-packet-ic9700"},
@@ -134,6 +135,8 @@ func checkFact(facts Facts, chk CheckRef) bool {
 		return facts.TCP[chk.Key]
 	case "process":
 		return facts.Processes[chk.Key]
+	case "interface":
+		return facts.Interfaces[chk.Key]
 	default:
 		return false
 	}

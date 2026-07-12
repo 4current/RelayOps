@@ -17,9 +17,10 @@ type Status struct {
 }
 
 type Facts struct {
-	Files     map[string]bool `json:"files"`
-	TCP       map[string]bool `json:"tcp"`
-	Processes map[string]bool `json:"processes"`
+	Files      map[string]bool `json:"files"`
+	TCP        map[string]bool `json:"tcp"`
+	Processes  map[string]bool `json:"processes"`
+	Interfaces map[string]bool `json:"interfaces"`
 }
 
 func CollectStatus(ctx context.Context) Status {
@@ -61,7 +62,9 @@ func CollectFacts(ctx context.Context) Facts {
 			"varahf":     processExistsPattern(ctx, "VARA.exe"),
 			"varafm":     processExistsPattern(ctx, "VARAFM.exe"),
 		},
-	}
+		Interfaces: map[string]bool{
+			"ax0": interfaceExists(ctx, "ax0"),
+		}}
 
 }
 
@@ -92,4 +95,9 @@ func processExistsPattern(ctx context.Context, pattern string) bool {
 	out, err := exec.CommandContext(ctx, "pgrep", "-f", pattern).Output()
 	return err == nil && strings.TrimSpace(string(out)) != ""
 
+}
+
+func interfaceExists(ctx context.Context, name string) bool {
+	err := exec.CommandContext(ctx, "ip", "link", "show", name).Run()
+	return err == nil
 }
