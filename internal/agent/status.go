@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -36,6 +37,13 @@ func CollectStatus(ctx context.Context) Status {
 
 }
 
+func soundmodemDevicePath() string {
+	return fmt.Sprintf(
+		"/run/user/%d/relayops/soundmodem0",
+		os.Getuid(),
+	)
+}
+
 func CollectFacts(ctx context.Context) Facts {
 
 	return Facts{
@@ -46,7 +54,7 @@ func CollectFacts(ctx context.Context) Facts {
 			"ic9700_audio": fileExists("/dev/snd/by-radio/ic9700-control"),
 			"tty9700A":     fileExists("/dev/tty9700A"),
 			"tty9700B":     fileExists("/dev/tty9700B"),
-			"soundmodem0":  fileExists("/dev/soundmodem0"),
+			"soundmodem0":  fileExists(soundmodemDevicePath()),
 		},
 		TCP: map[string]bool{
 			"rigctld_ts890":  tcpOpen("127.0.0.1:4532"),

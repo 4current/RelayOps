@@ -4,57 +4,70 @@ set -euo pipefail
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/relayops"
 KISS_DEVICE="$RUNTIME_DIR/soundmodem0"
 CONFIG="$RUNTIME_DIR/soundmodem-ic9700.conf"
-LOG="$HOME/soundmodem-ic9700.log"
+LOGFILE="$HOME/soundmodem-ic9700.log"
 
 mkdir -p "$RUNTIME_DIR"
-rm -f "$KISS_DEVICE"
 
-sed \
-  "s|file=\"/dev/soundmodem0\"|file=\"$KISS_DEVICE\"|" \
-  /etc/ax25/soundmodem.conf >"$CONFIG"
+# Already completely ready: idempotent success.
+if pgrep -x soundmodem >/dev/null && ip link show ax0 >/dev/null 2>&1; then
+    echo "packet service already running"
+    exit 0
+fi
 
+# Modem is running, but AX.25 has not yet been attached.
 if pgrep -x soundmodem >/dev/null; then
     echo "soundmodem already running"
-else
-    nohup /usr/sbin/soundmodem -s -c ax25 "$CONFIG" \
-      >"$LOG" 2>&1 &
-    echo "starting soundmodem"
-fi
 
-for _ in {1..40}; do
-    if [[ -e "$KISS_DEVICE" ]]; then
-        echo "started soundmodem"
-        break
-    fi
-
-    if ! pgrep -x soundmodem >/dev/null; then
-        echo "ERROR: soundmodem exited"
-        tail -30 "$LOG"
+    if [[ ! -e "$KISS_DEVICE" ]]; then
+        echo "ERROR: soundmodem is running but $KISS_DEVICE is missing"
+        echo "stop and restart the packet service"
         exit 1
     fi
+else
+    echo "starting soundmodem"
 
-    sleep 0.25
-done
+    # Only remove a stale endpoint when starting a new modem process.
+    rm -f "$KISS_DEVICE"
 
-if [[ ! -e "$KISS_DEVICE" ]]; then
-    echo "ERROR: $KISS_DEVICE was not created"
-    tail -30 "$LOG"
-    exit 1
+    # Generate CONFIG here if your startup script substitutes paths/card numbers.
+
+    nohup /usr/sbin/soundmodem \
+        -s \
+        -c ax25 \
+        "$CONFIG" \
+        >"$LOGFILE" 2>&1 &
+
+    echo "started soundmodem pid=$!"
+
+    for _ in {1..40}; do
+        if [[ -e "$KISS_DEVICE" ]]; then
+            break
+        fi
+
+        if ! pgrep -x soundmodem >/dev/null; then
+            echo "ERROR: soundmodem exited during startup"
+            tail -40 "$LOGFILE"
+            exit 1
+        fi
+
+        sleep 0.25
+    done
+
+    if [[ ! -e "$KISS_DEVICE" ]]; then
+        echo "ERROR: $KISS_DEVICE was not created"
+        tail -40 "$LOGFILE"
+        exit 1
+    fi
 fi
 
-if ip link show ax0 >/dev/null 2>&1; then
-    echo "AX.25 interface ax0 already attached"
-else
+if ! ip link show ax0 >/dev/null 2>&1; then
     sudo -n /usr/sbin/kissattach "$KISS_DEVICE" icom
     echo "attached AX.25 port icom"
 fi
 
 if ! ip link show ax0 >/dev/null 2>&1; then
-
-  echo "ERROR: ax0 was not created"
-
-  exit 1
-
+    echo "ERROR: AX.25 interface ax0 was not created"
+    exit 1
 fi
 
 echo "packet service ready"
